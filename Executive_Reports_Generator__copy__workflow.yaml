@@ -1,0 +1,267 @@
+version: '1.0'
+blocks:
+  fc3c64ac-c3f0-4c62-8c1c-8b125d5ec9e8:
+    type: agent
+    name: Agent 3
+    inputs:
+      systemPrompt: |-
+        You are idea writing agent that combines all the information from the reddit posts and writes content ideas. I want you to write a array of 10 content ideas that can be used 
+        Remember to come up with something new which is not in the memory block. If something similar is there then build on it or else leave it out.
+        Adhere to the schema in the response format as well.
+        Do not give me anything other than the list of .
+      userPrompt: |-
+        Posts: <parallel3.results>
+        Memory: <memory2.memories>
+      model: Meta-Llama-3.3-70B-Instruct
+      responseFormat: |-
+        {
+          "name": "ideas_list",
+          "description": "List of 10 generated content ideas based on input information",
+          "strict": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "ideas": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 10,
+                "maxItems": 10,
+                "description": "Exactly 10 generated content ideas"
+              }
+            },
+            "required": ["ideas"],
+            "additionalProperties": false
+          }
+        }
+    connections:
+      success:
+        - f27408da-c82f-4ac2-8ea9-2890856024a2
+        - 109c3eeb-7d66-43af-9adf-a638c1f37e0a
+  bc2817f6-e5ef-4142-ac73-b4273e6a5be9:
+    type: agent
+    name: Agent 6
+    inputs:
+      systemPrompt: |-
+        You are a Query Writing Agent that transforms content ideas into research-ready queries.
+        Your role is to: Take in the given idea and generate one clear research query. Create an array of 3 keywords that would help a research tool (like Perplexity) explore the topic further. Ensure keywords are directly relevant to the idea, include both general and specific terms, and avoid redundancy. Output must strictly follow the provided response format schema.
+        Do not return anything outside of query and keywords.
+      userPrompt: <parallel.currentItem>
+      model: Meta-Llama-3.3-70B-Instruct
+      responseFormat: |-
+        {
+          "name": "query_with_keywords",
+          "description": "Generate a research query and a list of supporting keywords based on an idea",
+          "strict": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "A single research query derived from the given idea"
+              },
+              "keywords": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 3,
+                "maxItems": 8,
+                "description": "Supporting keywords to guide the research for content creation"
+              }
+            },
+            "required": ["query", "keywords"],
+            "additionalProperties": false
+          }
+        }
+    parentId: afc81457-f7d2-4d3f-8efc-f5917d0bd733
+  a097df8e-62fa-4e8d-b37a-9b00ea7e1166:
+    type: agent
+    name: Researchagent
+    inputs:
+      systemPrompt: You are a researcher agent that will do some research based on this and give an idea to create a content. Dont give anything other than the idea itself. Give a very good idea
+      userPrompt: <parallel.currentItem>
+      model: gpt-4o
+      responseFormat: |-
+        {
+          "name": "research_content_idea",
+          "description": "Generate a single, well-formed content idea based on the research",
+          "strict": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "idea": {
+                "type": "string",
+                "description": "A clear, compelling content idea derived from the research"
+              }
+            },
+            "required": ["idea"],
+            "additionalProperties": false
+          }
+        }
+    parentId: 5313383b-c3d7-4453-bfdb-bb9e384f994f
+  a4651a4c-000f-417f-b20e-3101cfbc9ea8:
+    type: agent
+    name: Agent 4
+    inputs:
+      systemPrompt: |-
+        You are SubredditFinder, an AI agent that recommends subreddit names relevant to a given topic.
+
+        Goals:
+        - Return a list of subreddit names only.
+        - Each name should be valid (without the "r/" prefix).
+        - Output only JSON that matches the response format.
+      userPrompt: |-
+        Topic: <variable_topic.result>
+
+        Task:
+        Recommend 3–8 subreddits most relevant to the topic. 
+        Each must include:
+        - name: subreddit name without "r/
+      model: gpt-4o
+      responseFormat: |
+        {
+          "name": "subreddit_recommendations",
+          "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["subreddits"],
+            "properties": {
+              "subreddits": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 8,
+                "items": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 50
+                }
+              }
+            }
+          }
+        }
+    connections:
+      success: 07a655ba-28a1-43b4-af1e-8a6ed9de4920
+  d6353673-2526-421a-b88c-ef9638ac85c9:
+    type: function
+    name: variable_topic
+    inputs:
+      code: |-
+        const topic = "AI"
+        return topic
+    connections:
+      success: a4651a4c-000f-417f-b20e-3101cfbc9ea8
+  f0929e33-cb87-4390-bc54-d8404c3efee8:
+    type: function
+    name: Function 1
+    inputs:
+      code: |-
+        const ideas = <agent3>;  // agent output
+
+        // Extract the "result" object
+        const result = ideas;
+
+        // Collect numeric keys only (0,1,2,...)
+        const keys = Object.keys(result).filter(k => /^\d+$/.test(k));
+
+        // Sort keys numerically
+        keys.sort((a, b) => Number(a) - Number(b));
+
+        // Map to their values
+        let list = keys.map(k => result[k]);
+
+        // Add a limit (default 5 if not provided)
+        const limit = <limit.result>;
+        list = list.slice(0, limit);
+
+        return list;
+    connections:
+      success: afc81457-f7d2-4d3f-8efc-f5917d0bd733
+  109c3eeb-7d66-43af-9adf-a638c1f37e0a:
+    type: function
+    name: limit
+    inputs:
+      code: |-
+        const limit = 5
+        return limit
+    connections:
+      success: f0929e33-cb87-4390-bc54-d8404c3efee8
+  d1337565-f925-475b-a022-697423c5021c:
+    type: function
+    name: Function 4
+    connections:
+      success: eef90643-2e80-48c9-b05b-e99f9e29928e
+  eef90643-2e80-48c9-b05b-e99f9e29928e:
+    type: gmail
+    name: Gmail 1
+    inputs:
+      operation: send_gmail
+      subject: Content ideas
+      body: <parallel2.results>
+  f27408da-c82f-4ac2-8ea9-2890856024a2:
+    type: memory
+    name: Memory 2
+    inputs:
+      operation: add
+      id: reddit_01
+      role: user
+      content: <agent3>
+  d744fb9f-dbd2-4d68-a182-bde2871453db:
+    type: memory
+    name: Memory 3
+    inputs:
+      operation: add
+      id: reddit_01
+      role: user
+      content: '[]'
+  fde1d5fd-f310-4c26-b596-2b32f31bfbbb:
+    type: memory
+    name: Memory 2
+    inputs:
+      operation: get
+      id: reddit_01
+      role: user
+    connections:
+      success: fc3c64ac-c3f0-4c62-8c1c-8b125d5ec9e8
+  5313383b-c3d7-4453-bfdb-bb9e384f994f:
+    type: parallel
+    name: Parallel 2
+    inputs:
+      collection: <parallel1.results>
+    connections:
+      parallel:
+        start: a097df8e-62fa-4e8d-b37a-9b00ea7e1166
+        end: d1337565-f925-475b-a022-697423c5021c
+  afc81457-f7d2-4d3f-8efc-f5917d0bd733:
+    type: parallel
+    name: Parallel 1
+    inputs:
+      collection: <function1.result>
+    connections:
+      parallel:
+        start: bc2817f6-e5ef-4142-ac73-b4273e6a5be9
+        end: 5313383b-c3d7-4453-bfdb-bb9e384f994f
+  07a655ba-28a1-43b4-af1e-8a6ed9de4920:
+    type: parallel
+    name: Parallel 3
+    inputs:
+      collection: <agent4.subreddits>
+    connections:
+      parallel:
+        start: 5a03c663-dd4d-4d09-916b-738888d8cd87
+        end: fde1d5fd-f310-4c26-b596-2b32f31bfbbb
+  5a03c663-dd4d-4d09-916b-738888d8cd87:
+    type: reddit
+    name: Reddit 1
+    inputs:
+      operation: get_posts
+      subreddit: <parallel.currentItem>
+      sort: hot
+      limit: '3'
+    parentId: 07a655ba-28a1-43b4-af1e-8a6ed9de4920
+  d970dbb0-1fd9-4270-a0fc-5c0973b107b9:
+    type: starter
+    name: Start
+    inputs:
+      startWorkflow: manual
+    connections:
+      success:
+        - d744fb9f-dbd2-4d68-a182-bde2871453db
+        - d6353673-2526-421a-b88c-ef9638ac85c9
